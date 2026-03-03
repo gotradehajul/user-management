@@ -16,8 +16,6 @@ return [
 
     'default' => env('MAIL_MAILER', 'log'),
 
-    'admin_address' => env('ADMIN_EMAIL', 'admin@example.com'),
-
     /*
     |--------------------------------------------------------------------------
     | Mailer Configurations

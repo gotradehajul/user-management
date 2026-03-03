@@ -17,7 +17,11 @@ class UserApiTest extends TestCase
     {
         Mail::fake();
 
-        config(['mail.admin_address' => 'admin@example.com']);
+        User::factory()->create([
+            'role' => 'admin',
+            'email' => 'admin@example.com',
+            'active' => true,
+        ]);
 
         $response = $this->postJson('/api/users', [
             'email' => 'john@example.com',
@@ -136,5 +140,36 @@ class UserApiTest extends TestCase
 
         $this->assertTrue($thisEntry['can_edit']);
         $this->assertFalse($targetEntry['can_edit']);
+    }
+
+    public function test_update_user_with_middleware_allows_and_blocks_by_role_rules(): void
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        $manager = User::factory()->create(['role' => 'manager']);
+        $normalUser = User::factory()->create(['role' => 'user', 'name' => 'Normal User']);
+        $otherManager = User::factory()->create(['role' => 'manager', 'name' => 'Other Manager']);
+
+        $this->actingAs($admin)
+            ->patchJson("/api/users/{$otherManager->id}", ['name' => 'Updated By Admin'])
+            ->assertOk()
+            ->assertJsonPath('name', 'Updated By Admin');
+
+        $this->actingAs($manager)
+            ->patchJson("/api/users/{$normalUser->id}", ['name' => 'Updated By Manager'])
+            ->assertOk()
+            ->assertJsonPath('name', 'Updated By Manager');
+
+        $this->actingAs($manager)
+            ->patchJson("/api/users/{$otherManager->id}", ['name' => 'Should Fail'])
+            ->assertForbidden();
+
+        $this->actingAs($normalUser)
+            ->patchJson("/api/users/{$normalUser->id}", ['name' => 'Updated Self'])
+            ->assertOk()
+            ->assertJsonPath('name', 'Updated Self');
+
+        $this->actingAs($normalUser)
+            ->patchJson("/api/users/{$manager->id}", ['name' => 'Should Also Fail'])
+            ->assertForbidden();
     }
 }

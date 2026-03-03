@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Mail\AdminNewUserNotificationMail;
 use App\Mail\UserCreatedMail;
 use App\Models\User;
+use App\Support\UserEditPermission;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
@@ -31,8 +32,17 @@ class UserController extends Controller
 
         Mail::to($user->email)->send(new UserCreatedMail($user));
 
-        $adminEmail = (string) config('mail.admin_address', 'admin@example.com');
-        Mail::to($adminEmail)->send(new AdminNewUserNotificationMail($user));
+        $adminEmails = User::query()
+            ->where('role', 'admin')
+            ->where('active', true)
+            ->pluck('email')
+            ->filter()
+            ->values()
+            ->all();
+
+        if (! empty($adminEmails)) {
+            Mail::to($adminEmails)->send(new AdminNewUserNotificationMail($user));
+        }
 
         return response()->json([
             'id' => $user->id,
@@ -78,23 +88,28 @@ class UserController extends Controller
                     'role' => $user->role,
                     'created_at' => $user->created_at?->toISOString(),
                     'orders_count' => $user->orders_count,
-                    'can_edit' => $this->canEditUser($authUser, $user),
+                    'can_edit' => UserEditPermission::canEdit($authUser, $user),
                 ];
             })->values()->all(),
         ]);
     }
 
-    private function canEditUser(?User $authUser, User $targetUser): bool
+    public function update(Request $request, User $user): JsonResponse
     {
-        if (! $authUser) {
-            return false;
-        }
+        $validated = $request->validate([
+            'name' => ['sometimes', 'string', 'min:3', 'max:50'],
+            'email' => ['sometimes', 'string', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+        ]);
 
-        return match ($authUser->role) {
-            'admin' => true,
-            'manager' => $targetUser->role === 'user',
-            'user' => $authUser->id === $targetUser->id,
-            default => false,
-        };
+        $user->fill($validated)->save();
+
+        return response()->json([
+            'id' => $user->id,
+            'email' => $user->email,
+            'name' => $user->name,
+            'role' => $user->role,
+            'active' => $user->active,
+            'created_at' => $user->created_at?->toISOString(),
+        ]);
     }
 }

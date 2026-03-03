@@ -12,7 +12,9 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        $middleware->alias([
+            'can.edit.user' => \App\Http\Middleware\EnsureUserCanEdit::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
